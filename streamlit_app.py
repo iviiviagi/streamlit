@@ -1,53 +1,61 @@
 import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-st.set_page_config(page_title="Car Company Profit Calculator", layout="wide")
-st.title("🚗 Car Company Profit & Revenue Simulator")
+st.set_page_config(layout='wide')
+st.title("Vehicle Financial Forecast Dashboard")
 
-st.sidebar.header("Adjust Your Business Assumptions")
-
-# Car Sales
-num_cars_sold = st.sidebar.slider("Cars Sold per Year", 0, 100_000, 10_000, step=1000)
-avg_base_price = st.sidebar.slider("Average Base Price ($)", 10_000, 100_000, 30_000, step=1000)
-avg_option_price = st.sidebar.slider("Average Option Add-on ($)", 0, 20_000, 5_000, step=500)
-cost_per_car = st.sidebar.slider("Total Cost per Car ($)", 15_000, 90_000, 28_000, step=1000)
-
-# Financing & Leasing
-financing_revenue = st.sidebar.slider("Financing & Leasing Revenue per Car ($)", 0, 10_000, 2000)
-
-# After-Sales Services
-service_revenue = st.sidebar.slider("After-Sales Services Revenue per Car ($)", 0, 5000, 1000)
-
-# Connected Services
-subscription_revenue = st.sidebar.slider("Connected Services (Software/Subscriptions) per Car ($)", 0, 3000, 500)
-
-# Used Car Sales
-used_car_profit = st.sidebar.slider("Profit per Used Car ($)", 0, 8000, 3000)
-used_cars_sold = st.sidebar.slider("Used Cars Sold per Year", 0, 50_000, 5000, step=500)
-
-# Fleet Sales
-fleet_cars_sold = st.sidebar.slider("Fleet Cars Sold", 0, 30_000, 2000)
-fleet_profit_per_car = st.sidebar.slider("Profit per Fleet Car ($)", 0, 10_000, 4000)
+# Simulated data based on the provided Excel structure
+data = {
+    'Market': ['EU', 'CN', 'US', 'EU', 'CN', 'US'],
+    'Powertrain': ['BEV 90kWh EAWD', 'BEV 87kWh ERWD', 'BEV 90kWh ERWD', 'BEV 90kWh EAWD', 'BEV 87kWh ERWD', 'BEV 90kWh ERWD'],
+    'Year': [2026, 2026, 2026, 2027, 2027, 2027],
+    'Volume': [10000, 8000, 5000, 11000, 8500, 5200],
+    'MSRP': [500000, 480000, 470000, 505000, 485000, 475000],
+    'OptionPrice': [25000, 20000, 15000, 25000, 20000, 15000],
+    'OptionCost': [20000, 18000, 12000, 20000, 18000, 12000],
+    'PowertrainCost': [40000, 38000, 36000, 40000, 38000, 36000],
+    'BaseCost': [200000]*6
+}
+df = pd.DataFrame(data)
 
 # Calculations
-selling_price = avg_base_price + avg_option_price
-profit_per_car = selling_price - cost_per_car
+df['Revenue'] = (df['MSRP'] + df['OptionPrice']) * df['Volume']
+df['UnitCost'] = df['BaseCost'] + df['OptionCost'] + df['PowertrainCost']
+df['TotalCost'] = df['UnitCost'] * df['Volume']
+df['Profit'] = df['Revenue'] - df['TotalCost']
+df['ProfitMargin'] = (df['Profit'] / df['Revenue']) * 100
 
-total_revenue = num_cars_sold * selling_price
-total_profit = (
-    num_cars_sold * (profit_per_car + financing_revenue + service_revenue + subscription_revenue)
-    + used_cars_sold * used_car_profit
-    + fleet_cars_sold * fleet_profit_per_car
-)
+st.sidebar.header("Filters")
+selected_year = st.sidebar.multiselect("Select Year", df['Year'].unique(), default=df['Year'].unique())
+selected_market = st.sidebar.multiselect("Select Market", df['Market'].unique(), default=df['Market'].unique())
+selected_powertrain = st.sidebar.multiselect("Select Powertrain", df['Powertrain'].unique(), default=df['Powertrain'].unique())
 
-# Output
-col1, col2 = st.columns(2)
-with col1:
-    st.metric("Total Revenue", f"${total_revenue:,.0f}")
-    st.metric("Profit per New Car", f"${profit_per_car:,.0f}")
+filtered_df = df[
+    (df['Year'].isin(selected_year)) &
+    (df['Market'].isin(selected_market)) &
+    (df['Powertrain'].isin(selected_powertrain))
+]
 
-with col2:
-    st.metric("Used Car Profit", f"${used_cars_sold * used_car_profit:,.0f}")
-    st.metric("Fleet Sales Profit", f"${fleet_cars_sold * fleet_profit_per_car:,.0f}")
+st.subheader("Data Overview")
+st.dataframe(filtered_df)
 
-st.header("💰 Total Estimated Annual Profit")
-st.success(f"${total_profit:,.0f}")
+st.subheader("Summary Metrics")
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Revenue", f"₹{filtered_df['Revenue'].sum():,.2f}")
+col2.metric("Total Cost", f"₹{filtered_df['TotalCost'].sum():,.2f}")
+col3.metric("Total Profit", f"₹{filtered_df['Profit'].sum():,.2f}")
+
+st.subheader("Profit Margin by Market")
+fig, ax = plt.subplots(figsize=(10, 5))
+sns.barplot(data=filtered_df, x='Market', y='ProfitMargin', hue='Year', ax=ax)
+ax.set_ylabel("Profit Margin (%)")
+st.pyplot(fig)
+
+st.subheader("Revenue, Cost and Profit Trends")
+melted_df = filtered_df.groupby(['Year'])[['Revenue', 'TotalCost', 'Profit']].sum().reset_index().melt(id_vars='Year')
+fig2, ax2 = plt.subplots(figsize=(10, 5))
+sns.barplot(data=melted_df, x='Year', y='value', hue='variable', ax=ax2)
+ax2.set_ylabel("Amount (₹)")
+st.pyplot(fig2)
